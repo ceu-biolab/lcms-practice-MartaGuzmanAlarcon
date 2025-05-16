@@ -1,27 +1,116 @@
-
 package lipid;
+
 
 unit LipidScoreUnit;
 
 // TODO Include here rules and queries to fulfill the practice requirements
 
-
-// This is one example of rules that only prints the factorial combination of all pairs eliminating the A-A combination.
-// !! TODO This rule does not include the lipid type, you shall add it.
-// !! TODO Rule that states that the same lipid type with the same number of double bonds and a higher number of carbons should have a higher RT
-// !! TODO
-rule "Score 1 for lipid pair with increasing RT and carbon count"
+rule "Score +1 for lipid pair with same type and DBs, increasing carbon count and RT"
 when
-    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount : lipid.getDoubleBondsCount()]
-    $a2 : /annotations [this!= $a1, lipid.getDoubleBondsCount() == $doubleBondCount,
-    rtMin > $rt1, lipid.getCarbonCount() > $carbonCount1]
+    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount : lipid.getDoubleBondsCount(), $type1 : lipid.lipidType]
+    $a2 : /annotations [this != $a1, lipid.getDoubleBondsCount() == $doubleBondCount, // Mismo número de enlaces dobles
+                        lipid.lipidType == $type1, // Mismo tipo de lípido
+                        rtMin > $rt1, // Mayor tiempo de retención
+                        lipid.getCarbonCount() > $carbonCount1] // Mayor número de carbonos
 then
-    // in this case, the only change is the addition of the score, but the fact does not change so we do not break the principle of refractoriness
+    // Se asigna +1 a ambas anotaciones si cumplen todas las condiciones
     $a1.addScore(1);
     $a2.addScore(1);
-    // !! TODO ONLY FOR DEBUGGING
-    System.out.println("Scored 1 for annotations: " + $a1 + " and " + $a2);
+
+    System.out.println("Score +1: " + $a1 + " vs " + $a2);
+end
+
+rule "Score -1 for lipid pair with same type and DBs, decreasing carbon count and increasing RT"
+when
+    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount : lipid.getDoubleBondsCount(), $type1 : lipid.lipidType]
+    $a2 : /annotations [this != $a1, lipid.getDoubleBondsCount() == $doubleBondCount, // Mismo número de enlaces dobles
+                        lipid.lipidType == $type1, // Mismo tipo de lípido
+                        lipid.getCarbonCount() < $carbonCount1, // Menos carbonos en la segunda anotación
+                        rtMin > $rt1] // Pero el tiempo de retención es mayor en la segunda anotación
+then
+    // Se asigna -1 a ambas anotaciones si cumplen las condiciones
+    $a1.addScore(-1);
+    $a2.addScore(-1);
+
+    System.out.println("Score -1: " + $a1 + " vs " + $a2);
 end
 
 
-// !! TODO NEXT RULE: Negative evidence. If the RT follows the opposite order than the previous one, then the addScore should be -1.
+rule "Score +1 for lipid pair with same type and carbon count, more double bonds and shorter RT"
+when
+    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount1 : lipid.getDoubleBondsCount(), $type1 : lipid.lipidType]
+    $a2 : /annotations [this != $a1,
+                        lipid.lipidType == $type1, // Same lipid type
+                        lipid.getCarbonCount() == $carbonCount1, // Same carbon count
+                        lipid.getDoubleBondsCount() > $doubleBondCount1, // More double bonds
+                        rtMin < $rt1] // Shorter retention time
+then
+    // Assign +1 to both annotations if conditions are met
+    $a1.addScore(1);
+    $a2.addScore(1);
+
+
+    System.out.println("Score +1 for double bonds: " + $a1 + " vs " + $a2);
+end
+
+rule "Score +1 for lipid pair with same carbon count and double bonds, correct type-based RT order"
+when
+    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount1 : lipid.getDoubleBondsCount(), $type1 : lipid.lipidType]
+    $a2 : /annotations [this != $a1,
+                        lipid.getCarbonCount() == $carbonCount1, // Same carbon count
+                        lipid.getDoubleBondsCount() == $doubleBondCount1, // Same double bonds
+                        $type2 : lipid.lipidType,
+                        rtMin > $rt1, // Higher retention time
+                        (
+                            ($type1 == "PG" && $type2 in ("PE", "PI", "PA", "PS", "PC")) ||
+                            ($type1 == "PE" && $type2 in ("PI", "PA", "PS", "PC")) ||
+                            ($type1 == "PI" && $type2 in ("PA", "PS", "PC")) ||
+                            ($type1 == "PA" && $type2 in ("PS", "PC")) ||
+                            ($type1 == "PS" && $type2 == "PC")
+                        )] // Correct type order based on RT
+then
+    // Assign +1 to both annotations if conditions are met
+    $a1.addScore(1);
+    $a2.addScore(1);
+    System.out.println("Score +1 for lipid type order: " + $a1 + " vs " + $a2);
+end
+
+
+rule "Score -1 for lipid pair with same carbon count and double bonds, incorrect type-based RT order"
+when
+
+    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount1 : lipid.getDoubleBondsCount(), $type1 : lipid.lipidType]
+    $a2 : /annotations [this != $a1,
+                        lipid.getCarbonCount() == $carbonCount1,
+                        lipid.getDoubleBondsCount() == $doubleBondCount1,
+                        $type2 : lipid.lipidType,
+                        rtMin < $rt1, // Incorrect: later type has shorter RT --> SCORE -1
+                        (
+                            ($type1 == "PG" && $type2 in ("PE", "PI", "PA", "PS", "PC")) ||
+                            ($type1 == "PE" && $type2 in ("PI", "PA", "PS", "PC")) ||
+                            ($type1 == "PI" && $type2 in ("PA", "PS", "PC")) ||
+                            ($type1 == "PA" && $type2 in ("PS", "PC")) ||
+                            ($type1 == "PS" && $type2 == "PC")
+                        )]
+then
+    $a1.addScore(-1);
+    $a2.addScore(-1);
+    System.out.println("Score -1 for incorrect lipid type order: " + $a1 + " vs " + $a2);
+end
+
+
+rule "Score -1 for lipid pair with same type and carbon count, fewer double bonds and shorter RT"
+when
+    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount1 : lipid.getDoubleBondsCount(), $type1 : lipid.lipidType]
+    $a2 : /annotations [this != $a1,
+                        lipid.lipidType == $type1,
+                        lipid.getCarbonCount() == $carbonCount1,
+                        lipid.getDoubleBondsCount() < $doubleBondCount1, // a2 vs a1 -> a2<a1
+                        rtMin < $rt1]
+then
+    $a1.addScore(-1);
+    $a2.addScore(-1);
+    System.out.println("Score -1 for incorrect double bonds: " + $a1 + " vs " + $a2);
+end
+
+

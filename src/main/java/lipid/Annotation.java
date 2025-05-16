@@ -1,15 +1,16 @@
 package lipid;
 
-import java.util.Collections;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
+import adduct.Adduct;
+import adduct.AdductList;
+
+import java.util.*;
 
 /**
  * Class to represent the annotation over a lipid
  */
 public class Annotation {
 
+    private static final int PPM_TOLERANCE=5;
     private final Lipid lipid;
     private final double mz;
     private final double intensity; // intensity of the most abundant peak in the groupedPeaks
@@ -50,6 +51,7 @@ public class Annotation {
         this.groupedSignals = new TreeSet<>(groupedSignals);
         this.score = 0;
         this.totalScoresApplied = 0;
+        detectAdduct();
     }
 
     public Lipid getLipid() {
@@ -104,6 +106,8 @@ public class Annotation {
      * has been applied.
      */
     public double getNormalizedScore() {
+        System.out.println("totalScoresApplied:"+totalScoresApplied);
+        System.out.println("score:"+ this.score);
         return (double) this.score / this.totalScoresApplied;
     }
 
@@ -128,5 +132,72 @@ public class Annotation {
                 lipid.getName(), mz, rtMin, adduct, intensity, score);
     }
 
-    // !!TODO Detect the adduct with an algorithm or with drools, up to the user.
+
+    /**
+     * Method to detect an adduct based on reference peak
+     */
+    public void detectAdduct() {
+        double referenceMz = this.mz;
+
+        if (this.ionizationMode == IoniationMode.POSITIVE) {
+            for (String candidateAdduct : AdductList.MAPMZPOSITIVEADDUCTS.keySet()) {
+                Double referenceMonoisotopicMass = Adduct.getMonoisotopicMassFromMZ(referenceMz, candidateAdduct);
+
+                for (String otherAdduct : AdductList.MAPMZPOSITIVEADDUCTS.keySet()) {
+                    if (otherAdduct.equals(candidateAdduct)) continue;
+
+                    for (Peak peak : groupedSignals) {
+                        System.out.println("groupedSignals:"+groupedSignals) ;
+                        System.out.println("peak:"+peak) ;
+                        Double otherPeakMonoIsotopicMass = Adduct.getMonoisotopicMassFromMZ(peak.getMz(), otherAdduct);
+                        int error = Adduct.calculatePPMIncrement(referenceMonoisotopicMass, otherPeakMonoIsotopicMass);
+                        System.out.println(error + ", " + candidateAdduct + " = " + referenceMonoisotopicMass + ", mz1 = " + referenceMz + ",   " + otherAdduct + " = " + otherPeakMonoIsotopicMass + ", mz2 = " + peak.getMz());
+                        System.out.println("error = " + error
+                                + ", candidateAdduct = " + candidateAdduct
+                                + ", referenceMonoisotopicMass = " + referenceMonoisotopicMass
+                                + ", referenceMz = " + referenceMz
+                                + ", otherAdduct = " + otherAdduct
+                                + ", otherPeakMonoIsotopicMass = " + otherPeakMonoIsotopicMass
+                                + ", mz2 = " + peak.getMz());
+
+
+                        if (error < PPM_TOLERANCE) {
+                            this.adduct = candidateAdduct;
+
+                            return;
+                        }
+
+                    }
+                }
+            }
+        } else if (this.ionizationMode == IoniationMode.NEGATIVE) {
+            for (String candidateAdduct : AdductList.MAPMZNEGATIVEADDUCTS.keySet()) {
+                Double referenceMonoisotopicMass = Adduct.getMonoisotopicMassFromMZ(referenceMz, candidateAdduct);
+
+                for (String otherAdduct : AdductList.MAPMZNEGATIVEADDUCTS.keySet()) {
+                    if (otherAdduct.equals(candidateAdduct)) continue;
+
+                    for (Peak peak : groupedSignals) {
+                        Double otherPeakMonoIsotopicMass = Adduct.getMonoisotopicMassFromMZ(peak.getMz(), otherAdduct);
+
+                        int error = Adduct.calculatePPMIncrement(referenceMonoisotopicMass, otherPeakMonoIsotopicMass);
+
+                        System.out.println("error = " + error
+                                + ", candidateAdduct = " + candidateAdduct
+                                + ", referenceMonoisotopicMass = " + referenceMonoisotopicMass
+                                + ", referenceMz = " + referenceMz
+                                + ", otherAdduct = " + otherAdduct
+                                + ", otherPeakMonoIsotopicMass = " + otherPeakMonoIsotopicMass
+                                + ", mz2 = " + peak.getMz());
+
+                        if (error < PPM_TOLERANCE) {
+                            this.adduct = candidateAdduct;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }

@@ -31,7 +31,7 @@ public class ElutionOrderTest {
      * Test to check the elution order of the lipids. The elution order is based on the number of carbons if the lipid type and the number of
      * double bonds is the same. The larger the number of carbons, the longer the RT.
      */
-    @Test
+    @Test // rule: Si tipo de lípido y número de dobles enlaces son iguales, entonces >C -> >RT if true --> +1
     public void score1BasedOnRTCarbonNumbers() {
         // Assume lipids already annotated
         LOG.info("Creating RuleUnit");
@@ -71,11 +71,44 @@ public class ElutionOrderTest {
 
     }
 
+    // test mio:
+
+    @Test // rule: Score -1 for lipid pair with same type and DBs, decreasing carbon count and increasing RT
+    public void scoreMinusOneWhenCarbonDecreasesButRTIncreases() {
+        LOG.info("Creating RuleUnit");
+        LipidScoreUnit lipidScoreUnit = new LipidScoreUnit();
+        RuleUnitInstance<LipidScoreUnit> instance = RuleUnitProvider.get().createRuleUnitInstance(lipidScoreUnit);
+
+        // Caso diseñado para violar la tendencia: menos carbonos pero mayor RT
+        Lipid lipidA = new Lipid(1, "TG 54:3", "C57H104O6", "TG", 54, 3); // debería tener mayor RT
+        Lipid lipidB = new Lipid(2, "TG 52:3", "C55H100O6", "TG", 52, 3); // tiene menos carbonos, pero le damos mayor RT → inconsistente
+
+        Annotation annotationA = new Annotation(lipidA, 885.79056, 10E6, 9d, IoniationMode.POSITIVE); // 54C, RT 9
+        Annotation annotationB = new Annotation(lipidB, 857.7593, 10E7, 10d, IoniationMode.POSITIVE); // 52C, RT 10 → viola la tendencia
+
+        try {
+            lipidScoreUnit.getAnnotations().add(annotationA);
+            lipidScoreUnit.getAnnotations().add(annotationB);
+
+            LOG.info("Run rules");
+            instance.fire();
+
+            // Ambas deben tener score -1 porque se viola la lógica esperada
+            assertEquals(-1.0, annotationA.getNormalizedScore(), 0.01);
+            assertEquals(-1.0, annotationB.getNormalizedScore(), 0.01);
+
+        } finally {
+            instance.close();
+        }
+    }
+
+
     /**
      * !!TODO Test to check the elution order of the lipids. The elution order is based on the number of double bonds if the lipid type and the number of
      * carbons is the same. The higher the number of double bonds, the shorter the RT.
      */
-    @Test
+    @Test // rule: Si tipo de lípido y número de carbonos son iguales, entonces: >x2B -> < RT if true --> +1
+
     public void score1BasedOnRTDoubleBonds() {
         // Assume lipids already annotated
         LOG.info("Creating RuleUnit");
@@ -114,13 +147,14 @@ public class ElutionOrderTest {
         }
     }
 
+
     /**
      * !!TODO Test to check the elution order of the lipids. The elution order is based on the number of double bonds if the lipid type and the number of
      * carbons is the same. The higher the number of double bonds, the shorter the RT.
      * The RT order of lipids with the same number of carbons and double bonds is the same
      * -> PG < PE < PI < PA < PS << PC.
      */
-    @Test
+    @Test // same C count and X2B: The RT order follows PG < PE < PI < PA < PS < PC, meaning PG has the shortest RT
     public void score1BasedOnLipidType() {
         // Assume lipids already annotated
         LOG.info("Creating RuleUnit");
@@ -194,7 +228,9 @@ public class ElutionOrderTest {
             instance.fire();
 
             // Here the logic that we expect. In this case we expect the full 3 annotations to have a positive score of 1
-
+            System.out.println("annotation1.getNormalizedScore():"+annotation1.getNormalizedScore());
+            System.out.println("annotation2.getNormalizedScore():"+annotation2.getNormalizedScore());
+            System.out.println("annotation3.getNormalizedScore():"+annotation3.getNormalizedScore());
             assertEquals(0d, annotation1.getNormalizedScore(), 0.01); // !! !! TODO the scores should be between -1 and 1. It is done, but check it out for yourself
             assertEquals(0d, annotation2.getNormalizedScore(), 0.01); // !! TODO the scores should be between -1 and 1. It is done, but check it out for yourself
             assertEquals(-1.0, annotation3.getNormalizedScore(), 0.01); // !! TODO the scores should be between -1 and 1. It is done, but check it out for yourself
